@@ -1,0 +1,117 @@
+# 自前LLM基盤 (llm-homelab)
+# Ollama + Open WebUI をリバースプロキシ(Caddy)の背後で公開し、
+# Prometheus + Grafana + node-exporter + cAdvisor で監視する構成。
+#
+# 使い方:
+#   1. cp .env.example .env  して .env を編集
+#   2. docker compose up -d
+#   3. ブラウザで https://<自分のドメイン> にアクセス (ローカル検証は http://localhost)
+#
+# GPUを使う場合は ollama サービスの deploy.resources 部分のコメントを外す。
+
+services:
+  # ---- LLM 本体 ----
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    # ローカルからだけ叩けるように、外部ポートは開けない(Caddy/Open WebUI経由で使う)
+    expose:
+      - "11434"
+    # ---- GPU を使う場合はここのコメントを外す (NVIDIA + nvidia-container-toolkit が必要) ----
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ---- ChatGPT風のUI ----
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+    volumes:
+      - openwebui_data:/app/backend/data
+    expose:
+      - "8080"
+
+  # ---- リバースプロキシ (自動HTTPS) ----
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    restart: unless-stopped
+    depends_on:
+      - open-webui
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN}
+
+  # ---- 監視: メトリクス収集 ----
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    expose:
+      - "9090"
+
+  # ---- 監視: ダッシュボード ----
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    # 監視画面はまずローカルからだけ見る。慣れたらCaddy経由で公開してもよい。
+    ports:
+      - "3000:3000"
+
+  # ---- 監視: ホスト(サーバー自身)のCPU/メモリ/ディスク ----
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    expose:
+      - "9100"
+
+  # ---- 監視: 各コンテナのリソース使用量 ----
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    expose:
+      - "8080"
+
+volumes:
+  ollama_data:
+  openwebui_data:
+  caddy_data:
+  caddy_config:
+  prometheus_data:
+  grafana_data:

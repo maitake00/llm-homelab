@@ -1,0 +1,15 @@
+# Caddy は {$DOMAIN} に対して Let's Encrypt の証明書を自動取得・自動更新する。
+# 手作業のSSL設定が要らないのがポイント(ここが最初の「面倒が消える」体験)。
+#
+# ローカルで試すだけなら、下の {$DOMAIN} のブロックはコメントアウトして
+# `:80` のブロックを使うと http://localhost で動く。
+
+{$DOMAIN} {
+	# Open WebUI にリバースプロキシ
+	reverse_proxy open-webui:8080
+}
+
+# ---- ローカル検証用 (ドメインが無いとき) ----
+# :80 {
+# 	reverse_proxy open-webui:8080
+# }

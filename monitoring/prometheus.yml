@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus 自身
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # サーバー自身(CPU/メモリ/ディスク/ネットワーク)
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # 各コンテナのリソース使用量
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # Ollama のメトリクス(バージョンにより /metrics を公開)。
+  # 取れない場合はこのjobを消すか、後述の運用メモに「なぜ取れないか」を記録する。
+  - job_name: ollama
+    static_configs:
+      - targets: ["ollama:11434"]
