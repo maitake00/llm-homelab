@@ -4,12 +4,12 @@
 # ローカルで試すだけなら、下の {$DOMAIN} のブロックはコメントアウトして
 # `:80` のブロックを使うと http://localhost で動く。
 
-{$DOMAIN} {
-	# Open WebUI にリバースプロキシ
-	reverse_proxy open-webui:8080
-}
+#{$DOMAIN} {
+#	# Open WebUI にリバースプロキシ
+#	reverse_proxy open-webui:8080
+#}
 
-# ---- ローカル検証用 (ドメインが無いとき) ----
-# :80 {
-# 	reverse_proxy open-webui:8080
-# }
+ #---- ローカル検証用 (ドメインが無いとき) ----
+ :80 {
+ 	reverse_proxy open-webui:8080
+ }

@@ -20,25 +20,25 @@ services:
     environment:
       # ---- 層4: メモリ最適化 (8GB VRAMに大きいモデルを載せる) ----
       # Flash Attention を有効化 (KVキャッシュ量子化の前提でもある)
-      - OLLAMA_FLASH_ATTENTION=1
+      #- OLLAMA_FLASH_ATTENTION=1
       # KVキャッシュを量子化して、コンテキストが使うVRAMを削減 (q8_0 は品質ほぼ無劣化)
       # さらに削りたいときは q4_0 にする (少し品質低下)
-      - OLLAMA_KV_CACHE_TYPE=q8_0
+      #- OLLAMA_KV_CACHE_TYPE=q8_0
       # 一度に1モデルだけ常駐 (8GBでは複数同時ロード不可)
-      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_MAX_LOADED_MODELS=2
       # モデルをメモリに保持する時間 (毎回のロード待ちを減らす)
       - OLLAMA_KEEP_ALIVE=30m
     # ローカルからだけ叩けるように、外部ポートは開けない(Caddy/Open WebUI経由で使う)
-    expose:
-      - "11434"
+    ports:
+      - "11434:11434"
     # ---- GPU を使う場合はここのコメントを外す (NVIDIA + nvidia-container-toolkit が必要) ----
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: all
+             capabilities: [gpu]
 
   # ---- ChatGPT風のUI ----
   open-webui:
@@ -58,26 +58,19 @@ services:
   # ---- 層1: RAG＋ツール (AnythingLLM) ----
   # OllamaをバックエンドにしてRAG・エージェント・ツール呼び出しを提供する上位層。
   # 画面: http://localhost:3001  (初回セットアップでLLM=Ollama, URL=http://ollama:11434 を指定)
-  anythingllm:
-    image: mintplexlabs/anythingllm:latest
-    container_name: anythingllm
-    restart: unless-stopped
-    depends_on:
-      - ollama
-    environment:
-      - LLM_PROVIDER=ollama
-      - OLLAMA_BASE_PATH=http://ollama:11434
-      - EMBEDDING_ENGINE=ollama
-      - EMBEDDING_BASE_PATH=http://ollama:11434
-      # 埋め込み用の軽量モデル (別途 ollama pull nomic-embed-text で入れる)
-      - EMBEDDING_MODEL_PREF=nomic-embed-text
-      - VECTOR_DB=lancedb
-      - STORAGE_DIR=/app/server/storage
-    volumes:
-      - anythingllm_data:/app/server/storage
-    ports:
-      - "3001:3001"
 
+  xinference:
+    image: xprobe/xinference:v2.8.0-cpu
+    container_name: xinference
+    restart: unless-stopped
+    command: xinference-local -H 0.0.0.0 --port 9997
+    environment:
+      - XINFERENCE_HOME=/data
+    volumes:
+      - xinference_data:/data
+    ports:
+      - "9997:9997"
+  
   # ---- リバースプロキシ (自動HTTPS) ----
   caddy:
     image: caddy:2
@@ -86,8 +79,8 @@ services:
     depends_on:
       - open-webui
     ports:
-      - "80:80"
-      - "443:443"
+      - "8091:80"
+      #- "443:443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -145,7 +138,7 @@ services:
 volumes:
   ollama_data:
   openwebui_data:
-  anythingllm_data:
+  xinference_data:
   caddy_data:
   caddy_config:
   prometheus_data:

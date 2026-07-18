@@ -1,65 +1,107 @@
-# llm-homelab — 自前LLM基盤を立てて運用する
+# llm-homelab — 8GB VRAMで動かす自前LLM基盤
 
-オープンなLLMを自分のサーバーで動かし、監視付きで運用するための構成一式。
-「自前でLLMを運用すると実際どこが大変なのか」を体験しながら、インフラ×AI(LLMOps)のスキルとポートフォリオを作ることを目的にしています。
+RTX 3060 Ti(8GB)+RAM 48GBのPCで、ローカルLLM・日英対応RAG・LoRA特化モデルを運用するための構成一式。
+「自前でLLMを運用すると実際どこが大変か」を体験しながら、インフラ×AI(LLMOps)のスキルとポートフォリオを作ることを目的に構築した。
 
-## なぜ作ったか (このプロジェクトの位置づけ)
+## 全体構成
 
-個人的に必要だから作ったのではなく、**実務で使われるLLMの自前運用(LLMOps)がどういうものか、手を動かして理解するため**に立てました。作って動かす過程で出てくる運用課題(コスト・リソース・証明書・監視など)を記録し、解決していくことそのものが成果物です。
+このリポジトリ(llm-homelab)は**基盤**。RAGとLoRAは姉妹リポジトリに分離している。
 
-## 構成
-
-| コンポーネント | 役割 |
+| リポジトリ | 役割 |
 | --- | --- |
-| Ollama | LLM本体。オープンモデルをローカルで動かす(推論はAPI課金なし) |
-| Open WebUI | ChatGPT風のチャットUI |
-| Caddy | リバースプロキシ。独自ドメイン+HTTPSを自動化 |
-| Prometheus | メトリクス収集 |
-| Grafana | ダッシュボード |
-| node-exporter | サーバー自身のCPU/メモリ/ディスク監視 |
-| cAdvisor | 各コンテナのリソース監視 |
+| **llm-homelab**(これ) | Ollama・監視(Prometheus/Grafana)・リランカー(Xinference)のDockerスタック |
+| **llamaindex-rag** | 日英対応RAGパイプライン(LlamaIndex自作) |
+| **lora-secretary** | 秘書スタイルLoRA(Swallow 8B、Colab学習→手元GGUF化) |
 
 ```
-[ブラウザ] --HTTPS--> [Caddy] --> [Open WebUI] --> [Ollama]
-                                    Prometheus <- node-exporter / cAdvisor / Ollama
-                                    Grafana <- Prometheus
+[llamaindex-rag]  質問 → bge-m3で検索 → bge-rerankerでリランク → LLMが回答
+                     │              │                  │
+[llm-homelab]     Ollama(GPU)   Xinference(CPU)     Ollama(GPU)
+                     │
+[lora-secretary]  secretary(Swallow 8B + 秘書LoRA) ← LLMとして使用可
 ```
 
-## 動かす前提
+## コンポーネント
 
-- Docker と Docker Compose が入っていること
-- メモリ 8GB 以上を推奨(小さいモデルなら4GBでも可)
-- GPUは無くても動く(CPU推論。遅いが体験には十分)。GPUがあれば `docker-compose.yml` の該当箇所を有効化
-- 公開する場合は、独自ドメインとサーバーの80/443番ポートが開いていること
+| サービス | 役割 |
+| --- | --- |
+| Ollama | LLM本体。生成(qwen3.5:9b / secretary)と埋め込み(bge-m3)。GPU |
+| Xinference | リランカー(bge-reranker-v2-m3)。CPU。v2.8.0-cpu固定 |
+| Open WebUI | ChatGPT風チャットUI |
+| Caddy | リバースプロキシ |
+| Prometheus + Grafana | メトリクス収集・ダッシュボード |
+| node-exporter / cAdvisor | ホスト・コンテナのリソース監視 |
 
-## 使い方
+## 導入モデル
+
+| モデル | 用途 | 実測速度(8GB VRAM) |
+| --- | --- | --- |
+| qwen3.5:9b | 汎用生成(テキスト+画像+ツール) | 約56 t/s(100% GPU) |
+| secretary | 秘書口調の生成(Swallow 8B+LoRA) | 同等 |
+| bge-m3 | 多言語埋め込み(日英対応) | - |
+| bge-reranker-v2-m3 | リランク(Xinference側) | CPU |
+
+---
+
+## 起動チェックリスト(PC再起動後はこれ)
+
+```
+□ 1. Docker Desktop を起動(クジラが安定するまで待つ)
+□ 2. ネイティブOllamaが起動していたら Quit(タスクトレイ右クリック)
+     ※これを忘れると 11434 を横取りされ、Dockerと別のOllamaに繋がる
+□ 3. llm-homelab を起動:
+     cd ~/home/new-project && docker compose up -d
+□ 4. リランカーを launch(Xinferenceは再起動のたび必要):
+     docker exec xinference xinference launch --model-name bge-reranker-v2-m3 --model-type rerank
+     確認: docker exec xinference xinference list
+□ 5. RAGを使う:
+     cd ~/home/llamaindex-rag && source .venv/bin/activate
+     python query.py "質問"
+```
+
+### コンテナを作り直した場合のみ(compose down / イメージ変更後)
+
+Xinference の pip 変更はコンテナ再作成で消えるため、再実行が必要:
+```bash
+docker exec xinference pip install sentence-transformers
+docker exec xinference pip uninstall -y peft
+```
+(恒久化するならフル版イメージ xprobe/xinference:v2.8.0 か、カスタムDockerfile化)
+
+---
+
+## 初期セットアップ(初回のみ)
 
 ```bash
-# 1. 設定ファイルを用意
-cp .env.example .env
-#   .env を編集: DOMAIN, WEBUI_SECRET_KEY, GRAFANA_PASSWORD を設定
-#   秘密鍵の生成例:  openssl rand -hex 32
+# 1. 設定
+cp .env.example .env   # DOMAIN, WEBUI_SECRET_KEY, GRAFANA_PASSWORD を設定
 
 # 2. 起動
 docker compose up -d
 
-# 3. モデルを1個ダウンロード(初回だけ。軽量なqwen2.5:3bなどから)
-docker exec -it ollama ollama pull qwen2.5:3b
+# 3. モデル導入
+docker exec -it ollama ollama pull qwen3.5:9b
+docker exec -it ollama ollama pull bge-m3
 
-# 4. アクセス
-#   チャットUI :  https://<DOMAIN>   (ローカル検証は Caddyfile を切り替えて http://localhost)
-#   Grafana   :  http://localhost:3000  (admin / .envのGRAFANA_PASSWORD)
+# 4. リランカー(Xinference)
+docker exec xinference pip install sentence-transformers
+docker exec xinference pip uninstall -y peft
+docker exec xinference xinference launch --model-name bge-reranker-v2-m3 --model-type rerank
 ```
 
-停止は `docker compose down`、ログ確認は `docker compose logs -f <サービス名>`。
+アクセス: チャットUI http://localhost:8091 / Grafana http://localhost:3000 / Xinference http://localhost:9997
 
-## 4週間ロードマップ
+---
 
-1. **1週目 — 動かす**: Ollama + Open WebUI を起動し、モデルを1個入れてチャットできる状態にする。「モデルが重い」「CPUだと遅い」等の最初の痛みを `OPERATIONS_LOG.md` に記録。
-2. **2週目 — 公開する**: Caddyで独自ドメイン+HTTPS化。証明書・ポート・アクセス制限まわりの詰まりを記録。ここがインフラの核。
-3. **3週目 — 監視する**: Prometheus + Grafana でサーバーとコンテナ、LLMのメトリクスをダッシュボード化。「監視対象＝自分のLLM基盤」がやっと成立する。
-4. **4週目 — 公開&発信**: この構成をGitHubに公開し、`OPERATIONS_LOG.md` を元にZenn/Qiitaに1本記事を書く。構成図とダッシュボードのスクショを添える。
+## 8GB VRAMで得た運用ノウハウ(実測に基づく)
 
-## 次の一手 (面倒をネタに変える)
+- **少しでもGPUから漏れると激遅**: 20%CPUオフロードで速度は約1/5(60→13 t/s)。「だいたい乗る」は不十分で、100% GPUに収め切ることが速度の絶対条件。
+- **num_ctxはVRAMの最大レバー**: qwen3.5の既定256Kは過剰。4096に絞ると本体がGPUに収まり速度が跳ねる。
+- **OLLAMA_MAX_LOADED_MODELS**: RAGは埋め込み+生成の2モデルを使う。1だと毎回6.4GBの載せ替えが発生して激遅。2にすると重い方が常駐し、軽い埋め込みは都度ロード(2-3秒)で済む。
+- **KVキャッシュ量子化(q8_0)+Flash Attention**: qwen3.5系で生成が1-2 t/sに壊れる不具合に遭遇し無効化。品質面でもフル精度KVの方が良いので外して正解だった。
+- **thinkingモデルの暴走**: 思考ブロックがコンテキストを食い潰しEmpty Responseになる。API側の thinking=False + temperature=0 + num_predict上限で制御。
+- **リランカーの供給問題**: Ollamaはリランカー非対応。Xinference v2.9.0はtorchcodecバグでrerankが壊れるため v2.8.0-cpu に固定し、sentence-transformers追加+peft削除で動作。
 
-運用中に見つけた面倒 —— 例: 「モデル切り替えが面倒」「トークン消費量が見えない」「どのモデルが速いか比べたい」 —— が、次に作る**自分のツール**のネタになります。それが2本目のGitHub実績になり、最初に探していた「需要のある作るもの」に繋がります。
+## 運用ログ
+
+試行錯誤の生の記録は `OPERATIONS_LOG.md` を参照。壁とその突破がそのまま記事のネタになっている。
