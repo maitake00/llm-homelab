@@ -54,16 +54,31 @@ services:
       - openwebui_data:/app/backend/data
     expose:
       - "8080"
+  
+  # ---- 高機能UI (LobeChat) ----
+  # 自作RAG API(server.py, ホストのuvicorn:8000)に OpenAI互換で接続する。
+  # ブラウザ: http://localhost:3210  (ACCESS_CODE でパスワード保護)
+  lobe-chat:
+    image: lobehub/lobe-chat:latest
+    container_name: lobe-chat
+    restart: unless-stopped
+    ports:
+      - "3210:3210"
+    environment:
+      - OPENAI_API_KEY=${RAG_API_KEY}
+      - OPENAI_PROXY_URL=http://host.docker.internal:8000/v1
+      - OPENAI_MODEL_LIST=-all,+secretary,+secretary-think
+      - ACCESS_CODE=${LOBE_ACCESS_CODE}
 
   # ---- 層1: RAG＋ツール (AnythingLLM) ----
   # OllamaをバックエンドにしてRAG・エージェント・ツール呼び出しを提供する上位層。
   # 画面: http://localhost:3001  (初回セットアップでLLM=Ollama, URL=http://ollama:11434 を指定)
 
   xinference:
-    image: xprobe/xinference:v2.8.0-cpu
+    build: ./xinference
+    image: llm-homelab-xinference:local
     container_name: xinference
     restart: unless-stopped
-    command: xinference-local -H 0.0.0.0 --port 9997
     environment:
       - XINFERENCE_HOME=/data
     volumes:
