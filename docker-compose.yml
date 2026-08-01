@@ -70,6 +70,23 @@ services:
       - OPENAI_MODEL_LIST=-all,+secretary,+secretary-think
       - ACCESS_CODE=${LOBE_ACCESS_CODE}
 
+  # ---- 外部アクセス (Tailscale サイドカー) ----
+  # LobeChat を Tailscale Serve で tailnet 内に HTTPS 公開。スマホから https://<hostname>.ts.net でアクセス。
+  # userspace networking のため NET_ADMIN / TUN 不要。
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    hostname: llm-homelab
+    restart: unless-stopped
+    depends_on:
+      - lobe-chat
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
   # ---- 層1: RAG＋ツール (AnythingLLM) ----
   # OllamaをバックエンドにしてRAG・エージェント・ツール呼び出しを提供する上位層。
   # 画面: http://localhost:3001  (初回セットアップでLLM=Ollama, URL=http://ollama:11434 を指定)
@@ -158,3 +175,4 @@ volumes:
   caddy_config:
   prometheus_data:
   grafana_data:
+  tailscale_state:
