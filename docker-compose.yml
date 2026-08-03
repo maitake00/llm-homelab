@@ -167,6 +167,23 @@ services:
     expose:
       - "8080"
 
+  # ---- 通知サーバ (ntfy) ----
+  # 秘書からのリマインドをスマホにプッシュ通知する。
+  # スマホの ntfy アプリで、サーバURL(Tailscale経由)とトピックを登録して使う。
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    restart: unless-stopped
+    command: serve
+    environment:
+      - NTFY_BASE_URL=http://localhost:8082
+      - NTFY_BEHIND_PROXY=true
+    volumes:
+      - ntfy_data:/var/cache/ntfy
+    ports:
+      - "8082:80"
+
+
 volumes:
   ollama_data:
   openwebui_data:
@@ -176,3 +193,4 @@ volumes:
   prometheus_data:
   grafana_data:
   tailscale_state:
+  ntfy_data:
