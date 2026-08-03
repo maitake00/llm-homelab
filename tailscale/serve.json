@@ -1,14 +1,46 @@
 {
   "TCP": {
-    "443": { "HTTPS": true },
-    "8443": { "HTTPS": true }
+    "443": {
+      "HTTPS": true
+    },
+    "8443": {
+      "HTTPS": true
+    },
+    "10000": {
+      "HTTPS": true
+    },
+    "10001": {
+      "HTTPS": true
+    }
   },
   "Web": {
     "${TS_CERT_DOMAIN}:443": {
-      "Handlers": { "/": { "Proxy": "http://lobe-chat:3210" } }
+      "Handlers": {
+        "/": {
+          "Proxy": "http://lobe-chat:3210"
+        }
+      }
     },
     "${TS_CERT_DOMAIN}:8443": {
-      "Handlers": { "/": { "Proxy": "http://ntfy:80" } }
+      "Handlers": {
+        "/": {
+          "Proxy": "http://ntfy:80"
+        }
+      }
+    },
+    "${TS_CERT_DOMAIN}:10000": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://caddy:8080"
+        }
+      }
+    },
+    "${TS_CERT_DOMAIN}:10001": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://host.docker.internal:9000"
+        }
+      }
     }
   }
 }

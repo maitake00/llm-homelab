@@ -119,6 +119,7 @@ services:
       - caddy_config:/config
     environment:
       - DOMAIN=${DOMAIN}
+      - PROXY_SECRET=${PROXY_SECRET}
 
   # ---- 監視: メトリクス収集 ----
   prometheus:
@@ -182,6 +183,17 @@ services:
       - ntfy_data:/var/cache/ntfy
     ports:
       - "8082:80"
+
+
+  # ---- 音声合成 (VOICEVOX) ----
+  # 秘書の回答を日本語で読み上げる。CPUで動作。
+  # 利用規約: キャラクターごとに規約があるため、公開作品で使う場合はクレジット表記を確認すること。
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-latest
+    container_name: voicevox
+    restart: unless-stopped
+    ports:
+      - "50021:50021"
 
 
 volumes:
