@@ -11,6 +11,12 @@
     },
     "10001": {
       "HTTPS": true
+    },
+    "10002": {
+      "HTTPS": true
+    },
+    "10003": {
+      "HTTPS": true
     }
   },
   "Web": {
@@ -39,6 +45,20 @@
       "Handlers": {
         "/": {
           "Proxy": "http://host.docker.internal:9000"
+        }
+      }
+    },
+    "${TS_CERT_DOMAIN}:10002": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://host.docker.internal:8000"
+        }
+      }
+    },
+    "${TS_CERT_DOMAIN}:10003": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://memos:5230"
         }
       }
     }

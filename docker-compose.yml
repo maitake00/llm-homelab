@@ -196,6 +196,18 @@ services:
       - "50021:50021"
 
 
+  # ---- メモ (Memos) ----
+  # スマホとPCで同期するメモ。Tailscale経由でどこからでも書ける。
+  memos:
+    image: neosmemo/memos:stable
+    container_name: memos
+    restart: unless-stopped
+    volumes:
+      - memos_data:/var/opt/memos
+    ports:
+      - "5230:5230"
+
+
 volumes:
   ollama_data:
   openwebui_data:
@@ -206,3 +218,4 @@ volumes:
   grafana_data:
   tailscale_state:
   ntfy_data:
+  memos_data:
