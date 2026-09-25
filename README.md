@@ -91,3 +91,24 @@ docker exec -it ollama ollama pull bge-m3
 - **リランカーの供給問題**: Ollamaはリランカー非対応。Xinference v2.9.0はtorchcodecバグでrerankが壊れるため v2.8.0-cpu に固定。sentence-transformers追加+peft削除+自動launchをカスタムイメージ(./xinference/Dockerfile)に焼き込んで恒久化。
 
 構築の経緯と各つまずきの詳細は [IMPLEMENTATION.md](./IMPLEMENTATION.md) を参照。
+
+---
+
+## 運用: ChromaDBバックアップ
+
+RAG API(`llamaindex-rag/server.py`)はこのDockerスタックには含まれず、ホスト上の`systemd`管理下で`uvicorn`として単独稼働している。
+ベクトルDB(ChromaDB)もホスト上のローカルディレクトリのみに存在し、冗長化されていない**単一障害点**。
+誤削除や破損に備え、`scripts/backup-chroma.sh` で世代管理付きのtar.gzバックアップを取れる。
+
+```bash
+# 手動実行(既定では ~/home/llm-platform/llamaindex-rag/chroma_db を対象)
+./scripts/backup-chroma.sh
+
+# cron登録例(毎日3時に実行、直近14世代を保持)
+crontab -e
+# 以下の行を追加:
+0 3 * * * /path/to/new-project/scripts/backup-chroma.sh >> ~/backup-chroma.log 2>&1
+```
+
+`CHROMA_DIR` / `BACKUP_DIR` / `KEEP_COUNT` は環境変数で上書き可能。
+なお、これはあくまで同一ホスト内でのバックアップであり、ホスト自体の故障には対応できない点に注意(オフホストへのコピーは今後の課題)。

@@ -21,6 +21,8 @@
 2. **リランカー統合の泥沼**: Ollamaはリランカー非対応。Xinference最新版はtorchcodecバグでrerankロード失敗。
 3. **回避不能**: RAGFlowに日本語トークナイズを直す設定は存在しない。
 
+評価用に丸ごとクローンしていたRAGFlow本体(`~/home/llm-platform/ragflow/`、どのリポジトリにも属さない孤立したディレクトリだった)は、上記の通り移行済みで不要と判断し削除した(2026-09-25)。
+
 **最終構成(llamaindex-rag)**:
 ```
 文書(日/英) → SentenceSplitter(512/64) → bge-m3埋め込み → Chroma
